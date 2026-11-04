@@ -3,7 +3,7 @@ import time
 import streamlit as st
 
 from common import require_student
-from items import CATEGORIES, ITEMS, SHOW_NAMES, SORT_SECONDS, image_for
+from items import CATEGORIES, ITEMS, SHOW_NAMES, SORT_SECONDS, image_html
 import storage
 
 student = require_student()
@@ -56,9 +56,9 @@ with st.form("c1_sort_form"):
     cols = st.columns(3, gap="medium")
     for i, item in enumerate(ITEMS):
         with cols[i % 3].container(border=True):
-            img = image_for(i)
+            img = image_html(i)
             if img:
-                st.image(str(img), width=200)
+                st.markdown(img, unsafe_allow_html=True)
             st.markdown(f"**{i + 1}. {item}**" if SHOW_NAMES else f"**{i + 1}번**")
             st.radio("분류", CATEGORIES, index=None, horizontal=True, key=f"c1_cat_{i}", label_visibility="collapsed")
             st.checkbox("헷갈려요", key=f"c1_hard_{i}")

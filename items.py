@@ -37,3 +37,45 @@ def image_for(i: int):
         if p.exists():
             return p
     return None
+
+
+def image_html(i: int, width: int = 200):
+    """i번째 쓰레기 사진을 페이지에 직접 넣는 <img> 태그.
+
+    st.image는 타이머가 1초마다 화면을 새로 그릴 때 사진 파일 주소가 지워져
+    일부 사진이 빠지는 문제가 있어, 사진을 페이지 안에 바로 넣는다.
+    """
+    p = image_for(i)
+    if not p:
+        return ""
+    return (
+        f'<img src="data:image/jpeg;base64,{_jpeg_b64(str(p), p.stat().st_mtime)}" '
+        f'width="{width}" style="max-width:100%;height:auto;border-radius:6px;display:block;margin-bottom:6px" alt="{i + 1}번 쓰레기">'
+    )
+
+
+def _jpeg_b64(path: str, _mtime: float) -> str:
+    return _cached_jpeg_b64(path, _mtime)
+
+
+try:
+    import streamlit as _st
+
+    @_st.cache_data(show_spinner=False)
+    def _cached_jpeg_b64(path: str, _mtime: float) -> str:
+        return _encode(path)
+except Exception:  # streamlit 밖에서 불러올 때
+    def _cached_jpeg_b64(path: str, _mtime: float) -> str:
+        return _encode(path)
+
+
+def _encode(path: str) -> str:
+    import base64
+    import io
+
+    from PIL import Image
+
+    im = Image.open(path).convert("RGB")
+    buf = io.BytesIO()
+    im.save(buf, format="JPEG", quality=85)
+    return base64.b64encode(buf.getvalue()).decode()
