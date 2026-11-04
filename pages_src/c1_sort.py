@@ -3,7 +3,7 @@ import time
 import streamlit as st
 
 from common import require_student
-from items import CATEGORIES, ITEMS, SORT_SECONDS, image_for
+from items import CATEGORIES, ITEMS, SHOW_NAMES, SORT_SECONDS, image_for
 import storage
 
 student = require_student()
@@ -58,8 +58,8 @@ with st.form("c1_sort_form"):
         with cols[i % 3].container(border=True):
             img = image_for(i)
             if img:
-                st.image(str(img), use_container_width=True)
-            st.markdown(f"**{i + 1}. {item}**")
+                st.image(str(img), width=200)
+            st.markdown(f"**{i + 1}. {item}**" if SHOW_NAMES else f"**{i + 1}번**")
             st.radio("분류", CATEGORIES, index=None, horizontal=True, key=f"c1_cat_{i}", label_visibility="collapsed")
             st.checkbox("헷갈려요", key=f"c1_hard_{i}")
     reason = st.text_area("가장 헷갈렸던 쓰레기와 그 이유", placeholder="예) 과자 봉지: 비닐인지 알루미늄인지 겉만 보고는 알 수 없어서", key="c1_reason")
@@ -83,4 +83,6 @@ if submitted:
         ss["c1_sort_done"] = record
         st.rerun()
     else:
-        st.error("저장하지 못했어요. 인터넷 연결을 확인하고 다시 눌러 주세요.")
+        st.error("저장하지 못했어요. 잠시 뒤 다시 눌러 주세요.")
+        if st.session_state.get("save_error"):
+            st.caption("선생님 확인용: " + st.session_state["save_error"])

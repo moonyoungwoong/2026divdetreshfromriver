@@ -43,4 +43,6 @@ if submitted:
             st.session_state["c1_define_done"] = record
             st.success("저장했어요! 고칠 내용이 있으면 수정해서 다시 저장해도 됩니다. 마지막에 저장한 내용이 남아요.")
         else:
-            st.error("저장하지 못했어요. 인터넷 연결을 확인하고 다시 눌러 주세요.")
+            st.error("저장하지 못했어요. 잠시 뒤 다시 눌러 주세요.")
+        if st.session_state.get("save_error"):
+            st.caption("선생님 확인용: " + st.session_state["save_error"])

@@ -34,15 +34,31 @@ def save(sheet: str, record: dict):
     record = {"제출시각": now_str(), **record}
     url = _secret("APPS_SCRIPT_URL")
     if url:
+        st.session_state["save_error"] = ""
         try:
             r = requests.post(
                 url,
                 json={"token": _secret("APPS_SCRIPT_TOKEN"), "sheet": sheet, "record": record},
                 timeout=20,
             )
-            return r.ok and r.json().get("ok", False)
-        except Exception:
+        except Exception as e:
+            st.session_state["save_error"] = f"구글 시트에 연결하지 못했습니다 ({type(e).__name__})."
             return False
+        try:
+            data = r.json()
+        except Exception:
+            st.session_state["save_error"] = (
+                f"구글 시트가 데이터 대신 웹페이지를 돌려줬습니다 (HTTP {r.status_code}). "
+                "Apps Script 배포의 액세스 권한이 '모든 사용자'인지, URL이 /exec로 끝나는지 확인하세요."
+            )
+            return False
+        if not data.get("ok"):
+            if data.get("error") == "token":
+                st.session_state["save_error"] = "비밀 문자열(TOKEN)이 서로 다릅니다. Secrets의 APPS_SCRIPT_TOKEN과 Apps Script의 TOKEN을 맞추고, Apps Script는 새 버전으로 다시 배포하세요."
+            else:
+                st.session_state["save_error"] = f"구글 시트가 저장을 거부했습니다: {data}"
+            return False
+        return True
     DATA_DIR.mkdir(exist_ok=True)
     path = DATA_DIR / f"{sheet}.csv"
     df = pd.DataFrame([record])

@@ -47,7 +47,9 @@
    - Branch: `main`
    - Main file path: `app.py`
    - App URL: 원하는 주소 (예: `gongju-river-ai`)
-3. **Advanced settings → Secrets**에 아래를 붙여 넣습니다.
+3. **Advanced settings**에서 **Python version을 3.12**로 고릅니다.
+   (3.14를 고르면 선생님 화면의 그래프 라이브러리가 작동하지 않습니다.)
+   같은 화면의 **Secrets**에 아래를 붙여 넣습니다.
 
    ```toml
    APPS_SCRIPT_URL = "1단계에서 복사한 웹 앱 URL"
