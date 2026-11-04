@@ -1,1 +1,86 @@
-# 2026divdetreshfromriver
+# 금강 쓰레기 AI 프로젝트 웹앱 (1차시)
+
+학생이 링크로 접속해 **5분 분류 체험**과 **문제 정의서**를 작성하면 구글 시트에 저장되고,
+**선생님 화면**에서 반 전체 결과를 실시간으로 볼 수 있습니다.
+
+## 폴더 구성
+
+| 파일 | 하는 일 |
+|---|---|
+| `app.py` | 메뉴(시작하기, 1차시 활동, 선생님 화면) |
+| `pages_src/home.py` | 학번·이름 입력 |
+| `pages_src/c1_sort.py` | 5분 분류 체험 |
+| `pages_src/c1_define.py` | 문제 정의서 |
+| `pages_src/teacher.py` | 선생님 화면 (비밀번호) |
+| `items.py` | 쓰레기 15개 목록, 분류 이름, 제한 시간 |
+| `storage.py` | 구글 시트 저장·불러오기 |
+| `apps_script.gs` | 구글 시트에 붙여 넣을 코드 |
+| `images/` | 쓰레기 사진 (01.jpg ~ 15.jpg) |
+
+## 1단계. 구글 시트 준비 (10분)
+
+1. 구글 드라이브에서 새 스프레드시트를 만듭니다. (이름 예: 금강 쓰레기 AI 활동 기록)
+2. 메뉴 **확장 프로그램 → Apps Script**를 엽니다.
+3. 기존 코드를 지우고 `apps_script.gs` 내용을 모두 붙여 넣습니다.
+4. 맨 위 `TOKEN = '...'`의 값을 아무도 모를 문자열로 바꾸고 저장합니다.
+5. 오른쪽 위 **배포 → 새 배포** → 톱니바퀴에서 **웹 앱** 선택
+   - 실행 사용자: **나**
+   - 액세스 권한이 있는 사용자: **모든 사용자**
+6. **배포**를 누르고 권한을 허용합니다.
+   ("확인되지 않은 앱" 화면이 나오면 **고급 → (프로젝트 이름)(으)로 이동**을 누릅니다. 선생님이 직접 만든 코드라 괜찮습니다.)
+7. 나오는 **웹 앱 URL** (`https://script.google.com/macros/s/.../exec`)을 복사해 둡니다.
+
+> 학생 활동 기록은 이 시트에 탭별로(`1차시_분류체험`, `1차시_문제정의서`) 쌓입니다.
+
+## 2단계. GitHub에 올리기 (5분)
+
+1. github.com에서 **New repository**를 만듭니다. (이름 예: `river-ai-app`, Public)
+2. **uploading an existing file**을 눌러 이 폴더의 파일과 폴더를 모두 끌어다 놓고 **Commit changes**를 누릅니다.
+   - `.streamlit` 폴더도 함께 올려야 색상 테마가 적용됩니다.
+   - `secrets.toml`은 올리지 마세요. (비밀번호가 들어 있기 때문)
+
+## 3단계. Streamlit에 배포 (5분)
+
+1. share.streamlit.io에 GitHub 계정으로 로그인합니다.
+2. **Create app → Deploy a public app from GitHub**
+   - Repository: 방금 만든 저장소
+   - Branch: `main`
+   - Main file path: `app.py`
+   - App URL: 원하는 주소 (예: `gongju-river-ai`)
+3. **Advanced settings → Secrets**에 아래를 붙여 넣습니다.
+
+   ```toml
+   APPS_SCRIPT_URL = "1단계에서 복사한 웹 앱 URL"
+   APPS_SCRIPT_TOKEN = "apps_script.gs의 TOKEN과 같은 값"
+   TEACHER_PASSWORD = "선생님 화면 비밀번호"
+   ```
+4. **Deploy**를 누르면 1~2분 뒤 앱이 열립니다. 이 주소를 학생들에게 QR코드나 링크로 나눠 줍니다.
+
+## 쓰레기 사진 넣기
+
+`images/` 폴더에 `01.jpg` ~ `15.jpg`를 넣으면 각 쓰레기 이름 위에 사진이 보입니다.
+번호는 `items.py`의 목록 순서와 같습니다. 사진이 없으면 이름만 나옵니다.
+GitHub 저장소의 `images` 폴더에 올리면 앱에 자동으로 반영됩니다.
+
+## 수업 전 확인
+
+- **수업 5분 전에 앱을 한 번 열어 두세요.** 한동안 접속이 없으면 앱이 잠들고, 깨우는 데 시간이 걸립니다.
+- 선생님 화면에서 자동 새로고침을 켜 두면 학생이 제출할 때마다 결과판이 바뀝니다.
+- 연습으로 넣은 기록은 구글 시트에서 행을 지우면 사라집니다.
+- 같은 학생이 여러 번 제출하면 선생님 화면에는 마지막 제출만 반영됩니다.
+
+## 바꾸고 싶을 때
+
+- 제한 시간: `items.py`의 `SORT_SECONDS`
+- 쓰레기 목록: `items.py`의 `ITEMS`
+- 분류 이름: `items.py`의 `CATEGORIES`
+- 2차시 이후 활동은 `pages_src/`에 파일을 추가하고 `app.py` 메뉴에 한 줄 넣으면 됩니다.
+
+## 내 컴퓨터에서 미리 실행해 보기
+
+```bash
+pip install -r requirements.txt
+streamlit run app.py
+```
+
+Secrets가 없으면 `data/` 폴더에 CSV로 저장되고, 선생님 화면 비밀번호는 `teacher`입니다.
