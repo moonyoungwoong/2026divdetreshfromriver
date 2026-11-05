@@ -93,7 +93,7 @@ def sort_tab():
             st.markdown(f"- {r['헷갈린 이유']}  \n  <span style='color:#8C8C8C;font-size:0.85em'>{r['학생']}</span>", unsafe_allow_html=True)
 
     with st.expander("제출 원본 보기"):
-        st.dataframe(df, use_container_width=True, hide_index=True)
+        st.dataframe(df, width="stretch", hide_index=True)
 
 
 def define_tab():
@@ -118,13 +118,125 @@ def define_tab():
                 st.markdown(f"{r[field]}  \n<span style='color:#8C8C8C;font-size:0.85em'>{r['학생']}</span>", unsafe_allow_html=True)
 
 
+def tm_tab():
+    from c3_config import CAUSES, CLASS_KEYS, EXPERIMENTS, SHEET, TEST_PHOTOS, label, photo_path
+
+    df = storage.latest_per_student(storage.load(SHEET))
+    if df.empty or "실험" not in df.columns:
+        st.info("아직 제출한 실험 기록이 없습니다. 학생이 ③ 티처블 머신 실험 기록을 제출하면 여기에 바로 나타납니다.")
+        return
+    for c in ["맞힌 수", "깨끗한 사진 맞힌 수", "흙 묻은 사진 맞힌 수"]:
+        df[c] = pd.to_numeric(df[c], errors="coerce")
+    base = df.loc[df["실험"] == "실험 1", "맞힌 수"].mean()
+
+    m = st.columns(3)
+    m[0].metric("제출한 학생", f"{len(df)}명")
+    m[1].metric("기준 실험(실험 1) 평균", "아직 없음" if pd.isna(base) else f"{base:.1f} / 8")
+    m[2].metric("전체 평균", f"{df['맞힌 수'].mean():.1f} / 8")
+
+    st.subheader("우리 반 실험 결과")
+    rows = []
+    for exp, e in EXPERIMENTS.items():
+        g = df[df["실험"] == exp]
+        if g.empty:
+            rows.append({"실험": exp, "바꾼 조건": f"{e['조건']} ({e['실험값']})" if exp != "실험 1" else e["조건"], "학생 수": 0})
+            continue
+        avg = g["맞힌 수"].mean()
+        if exp == "실험 1" or pd.isna(base):
+            vs = "-"
+        else:
+            d = avg - base
+            vs = f"{'▲' if d > 0.5 else '▼' if d < -0.5 else '≈'} {d:+.1f}"
+        pred = g["예측"].value_counts().idxmax() if exp != "실험 1" else "-"
+        rows.append(
+            {
+                "실험": exp,
+                "바꾼 조건": f"{e['조건']} ({e['실험값']})" if exp != "실험 1" else e["조건"],
+                "학생 수": len(g),
+                "가장 많은 예측": pred,
+                "평균 점수(/8)": round(avg, 1),
+                "기준 대비": vs,
+                "깨끗한 사진(/4)": round(g["깨끗한 사진 맞힌 수"].mean(), 1),
+                "흙 묻은 사진(/4)": round(g["흙 묻은 사진 맞힌 수"].mean(), 1),
+            }
+        )
+    summary = pd.DataFrame(rows)
+    st.dataframe(summary, hide_index=True, width="stretch")
+
+    left, right = st.columns(2, gap="large")
+    with left:
+        st.markdown("**실험별 평균 테스트 점수**")
+        done = summary[summary["학생 수"] > 0]
+        bars = alt.Chart(done).mark_bar(color="#5170FF").encode(
+            x=alt.X("실험:N", title=None, sort=list(EXPERIMENTS)),
+            y=alt.Y("평균 점수(/8):Q", title="평균 점수", scale=alt.Scale(domain=[0, 8])),
+            tooltip=["실험", "바꾼 조건", "학생 수", "평균 점수(/8)"],
+        )
+        layers = [bars]
+        if not pd.isna(base):
+            layers.append(alt.Chart(pd.DataFrame({"y": [base]})).mark_rule(color="#FF3131", strokeDash=[6, 4], size=2).encode(y="y:Q"))
+        st.altair_chart(alt.layer(*layers).properties(height=280), use_container_width=True)
+        st.caption("빨간 점선 = 기준 실험(실험 1) 평균")
+    with right:
+        st.markdown("**깨끗한 사진 vs 흙 묻은 사진**")
+        long = done.melt(id_vars="실험", value_vars=["깨끗한 사진(/4)", "흙 묻은 사진(/4)"], var_name="사진", value_name="평균")
+        ch = alt.Chart(long).mark_bar().encode(
+            x=alt.X("실험:N", title=None, sort=list(EXPERIMENTS)),
+            xOffset="사진:N",
+            y=alt.Y("평균:Q", title="평균 맞힌 수", scale=alt.Scale(domain=[0, 4])),
+            color=alt.Color("사진:N", scale=alt.Scale(range=["#5170FF", "#A28231"]), legend=alt.Legend(orient="top", title=None)),
+            tooltip=["실험", "사진", "평균"],
+        )
+        st.altair_chart(ch.properties(height=280), use_container_width=True)
+
+    st.subheader("AI가 많이 틀린 사진")
+    cols = st.columns(8, gap="small")
+    for i, p in enumerate(TEST_PHOTOS):
+        col = f"사진{p['no']}_예측값"
+        if col not in df.columns:
+            continue
+        preds = df[col]
+        ok = (preds == p["answer"]).mean()
+        wrong = preds[preds != p["answer"]]
+        with cols[i].container(border=True):
+            path = photo_path(p["no"])
+            if path:
+                st.image(str(path))
+            st.markdown(f"**사진 {p['no']}**{' (흙)' if p['dirty'] else ''}  \n정답 {p['answer']}")
+            st.markdown(f"<span style='font-size:1.4em;font-weight:700;color:{'#FF3131' if ok < 0.5 else '#1D1D1F'}'>{ok:.0%}</span> 맞힘", unsafe_allow_html=True)
+            if len(wrong):
+                st.caption(f"주로 {wrong.value_counts().idxmax()}(으)로 착각")
+
+    left, right = st.columns([1, 1.4], gap="large")
+    with left:
+        st.markdown("**학생들이 고른 틀린 원인**")
+        causes = df["틀린 원인"].fillna("").str.split(" / ").explode().str.split(":").str[-1]
+        causes = causes[(causes != "") & (causes != "nan")].value_counts()
+        if causes.empty:
+            st.write("아직 없습니다.")
+        else:
+            st.bar_chart(causes.rename("학생 수"), horizontal=True, color="#FF3131")
+    with right:
+        st.markdown("**발견한 점 (발표 문장)**")
+        pick = st.segmented_control("실험", ["전체"] + list(EXPERIMENTS), default="전체", key="tm_found_pick")
+        view = df if pick in (None, "전체") else df[df["실험"] == pick]
+        for _, r in view.sort_values("실험").iterrows():
+            with st.container(border=True):
+                st.markdown(f"{r['발견한 점']}  \n<span style='color:#8C8C8C;font-size:0.85em'>{r['실험']} · {r['학생']} · {int(r['맞힌 수'])}/8</span>", unsafe_allow_html=True)
+
+    with st.expander("제출 원본 보기"):
+        st.dataframe(df, width="stretch", hide_index=True)
+
+
 @st.fragment(run_every=10 if auto else None)
 def board():
-    t1, t2 = st.tabs(["① 5분 분류 체험", "② 문제 정의서"])
+    t1, t2, t3 = st.tabs(["① 5분 분류 체험", "② 문제 정의서", "③ 티처블 머신 실험"])
     with t1:
         sort_tab()
     with t2:
         define_tab()
+    with t3:
+        tm_tab()
 
 
 board()
