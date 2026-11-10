@@ -118,6 +118,78 @@ def define_tab():
                 st.markdown(f"{r[field]}  \n<span style='color:#8C8C8C;font-size:0.85em'>{r['학생']}</span>", unsafe_allow_html=True)
 
 
+def label_tab():
+    from c2_config import CLASS_KEYS, CLASSES, GOAL, ROUND1, ROUND2, SHEET1, SHEET2, WRONG_NOS, photo
+
+    st.subheader("1라운드 · 반 전체 라벨 일치율")
+    d1 = storage.latest_per_student(storage.load(SHEET1))
+    if d1.empty or "학생" not in d1.columns:
+        st.info("아직 1라운드 제출이 없습니다.")
+    else:
+        stats = []
+        for p in ROUND1:
+            col = f"사진{p['no']}_라벨"
+            if col not in d1.columns:
+                continue
+            vc = d1[col].value_counts()
+            clues = d1[f"사진{p['no']}_단서"].fillna("").str.split(", ").explode()
+            clues = clues[clues != ""].value_counts()
+            stats.append({"no": p["no"], "note": p["note"], "top": vc.idxmax(), "share": vc.max() / len(d1), "vc": vc, "clues": clues})
+        agree = sum(x["share"] for x in stats) / len(stats)
+        m = st.columns(3)
+        m[0].metric("제출한 학생", f"{len(d1)}명")
+        m[1].metric("반 전체 일치율", f"{agree:.0%}", help="사진마다 가장 많이 고른 라벨을 고른 학생 비율의 평균")
+        m[2].metric("목표", f"{GOAL:.0%}", delta=f"{(agree - GOAL) * 100:+.0f}%p")
+        st.progress(min(agree, 1.0), text=f"일치율 {agree:.0%} / 목표 {GOAL:.0%}")
+        st.markdown("**의견이 많이 갈린 사진부터** (기준표를 고칠 근거)")
+        stats.sort(key=lambda x: x["share"])
+        cols = st.columns(4, gap="small")
+        for i, x in enumerate(stats):
+            with cols[i % 4].container(border=True):
+                img = photo(1, x["no"])
+                if img:
+                    st.image(img)
+                color = "#FF3131" if x["share"] < 0.7 else "#1D1D1F"
+                st.markdown(f"**사진 {x['no']}** · <span style='color:{color};font-weight:700'>{x['share']:.0%} 일치</span>  \n<span style='color:#8C8C8C;font-size:0.8em'>{x['note']}</span>", unsafe_allow_html=True)
+                st.markdown("  \n".join(f"{CLASSES[k]} {v}명" for k, v in x["vc"].items()))
+                if len(x["clues"]):
+                    st.caption("단서: " + ", ".join(x["clues"].index[:3]))
+
+    st.divider()
+    st.subheader("2라운드 · 틀린 라벨 검수")
+    d2 = storage.latest_per_student(storage.load(SHEET2))
+    if d2.empty or "학생" not in d2.columns:
+        st.info("아직 2라운드 제출이 없습니다.")
+        return
+    for c in ["찾은 틀린 라벨", "잘못 의심한 수"]:
+        d2[c] = pd.to_numeric(d2[c], errors="coerce")
+    m = st.columns(3)
+    m[0].metric("제출한 학생", f"{len(d2)}명")
+    m[1].metric("평균 찾은 틀린 라벨", f"{d2['찾은 틀린 라벨'].mean():.1f} / {len(WRONG_NOS)}")
+    m[2].metric("4장 모두 찾은 학생", f"{int((d2['찾은 틀린 라벨'] == len(WRONG_NOS)).sum())}명")
+    agree2 = []
+    for p in ROUND2:
+        col = f"사진{p['no']}_최종라벨"
+        if col in d2.columns:
+            agree2.append(d2[col].value_counts().max() / len(d2))
+    if agree2 and not d1.empty and "학생" in d1.columns:
+        st.markdown(f"**최종 라벨 일치율**: 1라운드 {agree:.0%} → 2라운드 **{sum(agree2) / len(agree2):.0%}**")
+    cols = st.columns(6, gap="small")
+    for i, p in enumerate(ROUND2):
+        col = f"사진{p['no']}_검수"
+        if col not in d2.columns:
+            continue
+        wrong = p["no"] in WRONG_NOS
+        rate = (d2[col] == "틀렸다").mean()
+        with cols[i % 6].container(border=True):
+            img = photo(2, p["no"])
+            if img:
+                st.image(img)
+            st.markdown(f"**사진 {p['no']}** {'🚩' if wrong else ''}  \n라벨 {CLASSES[p['given']]}" + (f" → 정답 {CLASSES[p['answer']]}" if wrong else ""))
+            st.markdown(f"<span style='font-weight:700;color:{'#5170FF' if wrong else ('#FF3131' if rate > 0.3 else '#1D1D1F')}'>{rate:.0%}</span> 가 틀렸다고 함", unsafe_allow_html=True)
+    st.caption("🚩 = 일부러 숨긴 틀린 라벨. 🚩가 없는데 '틀렸다'가 많으면, 그 사진도 기준표로 다시 이야기해 볼 만합니다.")
+
+
 def tm_tab():
     from c3_config import CAUSES, CLASS_KEYS, EXPERIMENTS, SHEET, TEST_PHOTOS, label, photo_path
 
@@ -230,11 +302,13 @@ def tm_tab():
 
 @st.fragment(run_every=10 if auto else None)
 def board():
-    t1, t2, t3 = st.tabs(["① 5분 분류 체험", "② 문제 정의서", "③ 티처블 머신 실험"])
+    t1, t2, t4, t3 = st.tabs(["① 5분 분류 체험", "② 문제 정의서", "② 라벨링 미션 (2차시)", "③ 티처블 머신 실험"])
     with t1:
         sort_tab()
     with t2:
         define_tab()
+    with t4:
+        label_tab()
     with t3:
         tm_tab()
 
