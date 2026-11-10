@@ -71,8 +71,9 @@ def crit_form(form_key, prefix, base=None):
         for i, k in enumerate(CLASS_KEYS):
             with cols[i % 2].container(border=True):
                 st.markdown(f"**{CLASSES[k]} ({k})**")
-                default = [x for x in (base.get(f"{k}_단서") or "").split(", ") if x in CLUES]
-                st.multiselect("이런 단서가 보이면", CLUES, default=default, max_selections=3, key=f"{prefix}{k}_c", placeholder="단서 고르기 (최대 3개)")
+                default = [x for x in (base.get(f"{k}_단서") or "").split(", ") if x]
+                opts = CLUES + [x for x in default if x not in CLUES]
+                st.multiselect("이런 단서가 보이면 (최대 4개, 목록에 없으면 직접 입력)", opts, default=default, max_selections=4, accept_new_options=True, key=f"{prefix}{k}_c", placeholder="단서 고르기 또는 입력")
                 st.text_input("한 줄 기준", value=base.get(f"{k}_기준", ""), key=f"{prefix}{k}_t",
                               placeholder={"plastic": "예) 투명하거나 색이 있고, 눌리면 찌그러지는 병·용기",
                                            "can": "예) 반짝이는 금속으로 된 원통 모양",
@@ -131,7 +132,7 @@ if not r1_done:
                     st.image(img)
                 st.markdown(f"**사진 {p['no']}**")
                 st.radio("라벨", CLASS_KEYS, format_func=short, horizontal=True, index=None, key=f"c2_l{p['no']}", label_visibility="collapsed")
-                st.multiselect("판단한 단서 (최대 2개)", CLUES, max_selections=2, key=f"c2_c{p['no']}", placeholder="단서 고르기")
+                st.multiselect("판단한 단서 (최대 3개)", CLUES, max_selections=3, accept_new_options=True, key=f"c2_c{p['no']}", placeholder="단서 고르기 또는 입력")
         go = st.form_submit_button("1라운드 제출", type="primary", width="stretch")
     if go:
         miss_l = [p["no"] for p in ROUND1 if not ss.get(f"c2_l{p['no']}")]
