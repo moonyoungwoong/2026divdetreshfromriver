@@ -119,8 +119,47 @@ def define_tab():
 
 
 def label_tab():
-    from c2_config import CLASS_KEYS, CLASSES, GOAL, ROUND1, ROUND2, SHEET1, SHEET2, WRONG_NOS, photo
+    from c2_config import CLASS_CRIT_SHEET, CLASS_KEYS, CLASSES, CRIT_SHEET, GOAL, ROUND1, ROUND2, SHEET1, SHEET2, SPECIAL, WRONG_NOS, photo
 
+    st.subheader("기준 세우기 · 학생들이 정한 기준")
+    dc = storage.load(CRIT_SHEET)
+    if dc.empty or "단계" not in dc.columns:
+        st.info("아직 기준을 제출한 학생이 없습니다.")
+    else:
+        stage = st.segmented_control("보기", ["처음 세운 기준", "고친 기준"], default="처음 세운 기준", key="crit_stage")
+        view = storage.latest_per_student(dc[dc["단계"] == ("수정" if stage == "고친 기준" else "처음")])
+        st.caption(f"{len(view)}명 제출")
+        cols = st.columns(4, gap="small")
+        for i, k in enumerate(CLASS_KEYS):
+            with cols[i].container(border=True):
+                st.markdown(f"**{CLASSES[k]}**")
+                clues = view[f"{k}_단서"].fillna("").str.split(", ").explode()
+                clues = clues[clues != ""].value_counts()
+                if len(clues):
+                    st.caption("많이 고른 단서: " + ", ".join(f"{c}({n})" for c, n in clues.head(3).items()))
+                for t in view[f"{k}_기준"]:
+                    if t:
+                        st.markdown(f"- {t}")
+        sc = st.columns(len(SPECIAL))
+        for (key, (q, _)), col in zip(SPECIAL.items(), sc):
+            col.markdown(f"**{q}**  \n" + "  \n".join(f"{a}: {n}명" for a, n in view[key].value_counts().items()))
+
+    with st.expander("📌 우리 반 기준표 정하기 (저장하면 학생 화면의 '기준 고치기'와 2라운드에 보입니다)"):
+        cur = storage.load(CLASS_CRIT_SHEET)
+        cur = {} if cur.empty else cur.iloc[-1].to_dict()
+        with st.form("class_crit_form"):
+            cols = st.columns(2)
+            vals = {}
+            for i, k in enumerate(CLASS_KEYS):
+                vals[f"{k}_기준"] = cols[i % 2].text_input(f"{CLASSES[k]} ({k})", value=cur.get(f"{k}_기준", ""))
+            for key, (q, opts) in SPECIAL.items():
+                vals[key] = st.radio(q, opts, horizontal=True, index=opts.index(cur[key]) if cur.get(key) in opts else 0)
+            if st.form_submit_button("우리 반 기준표 저장", type="primary"):
+                if storage.save(CLASS_CRIT_SHEET, {"학생": "선생님", **{f"{k}_단서": "" for k in CLASS_KEYS}, **vals}):
+                    storage.load.clear()
+                    st.success("저장했습니다.")
+
+    st.divider()
     st.subheader("1라운드 · 반 전체 라벨 일치율")
     d1 = storage.latest_per_student(storage.load(SHEET1))
     if d1.empty or "학생" not in d1.columns:

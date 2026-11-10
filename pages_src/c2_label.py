@@ -1,7 +1,21 @@
 import pandas as pd
 import streamlit as st
 
-from c2_config import CLASS_KEYS, CLASSES, CLUES, ROUND1, ROUND2, SHEET1, SHEET2, WRONG_NOS, label, photo
+from c2_config import (
+    CLASS_CRIT_SHEET,
+    CLASS_KEYS,
+    CLASSES,
+    CLUES,
+    CRIT_SHEET,
+    ROUND1,
+    ROUND2,
+    SHEET1,
+    SHEET2,
+    SPECIAL,
+    WRONG_NOS,
+    label,
+    photo,
+)
 from common import require_student
 import storage
 
@@ -11,26 +25,103 @@ ss = st.session_state
 st.title("② 라벨링 미션: 나는 AI 데이터 라벨러")
 st.write(
     "AI는 사람이 붙인 **라벨**(정답)을 그대로 믿고 배웁니다. "
-    "오늘 우리는 AI가 배울 사진에 라벨을 붙이고, 다른 사람이 붙인 라벨을 검수합니다."
+    "오늘 우리는 **기준을 먼저 세우고**, 그 기준대로 사진에 라벨을 붙인 뒤, 다른 사람이 붙인 라벨을 검수합니다."
 )
 
+crit = ss.get("c2_crit")          # 처음 세운 기준
+crit2 = ss.get("c2_crit2")        # 고친 기준
 r1_done = ss.get("c2_r1")
 r2_done = ss.get("c2_r2")
 
 with st.container(border=True):
-    a, b = st.columns(2)
-    a.markdown(f"{'✅' if r1_done else '1️⃣'} **1라운드 · 라벨러**  \n사진 12장에 라벨과 단서 붙이기")
-    b.markdown(f"{'✅' if r2_done else '2️⃣'} **2라운드 · 검수자**  \n숨겨진 틀린 라벨 4장 찾기")
+    cols = st.columns(4)
+    marks = [crit, r1_done, crit2, r2_done]
+    names = [("기준 세우기", "클래스마다 판단 기준 정하기"), ("1라운드 · 라벨러", "기준대로 사진 12장 라벨링"),
+             ("기준 고치기", "의견이 갈린 사진 보고 수정"), ("2라운드 · 검수자", "숨겨진 틀린 라벨 4장 찾기")]
+    for i, (c, (t, d)) in enumerate(zip(cols, names)):
+        c.markdown(f"{'✅' if marks[i] else ['1️⃣', '2️⃣', '3️⃣', '4️⃣'][i]} **{t}**  \n<span style='font-size:0.85em;color:#8C8C8C'>{d}</span>", unsafe_allow_html=True)
 
 
 def short(c):
     return CLASSES[c]
 
 
+def class_crit():
+    df = storage.load(CLASS_CRIT_SHEET)
+    return None if df.empty else df.iloc[-1].to_dict()
+
+
+def show_crit(c, title):
+    with st.expander(title, expanded=True):
+        cols = st.columns(4, gap="small")
+        for i, k in enumerate(CLASS_KEYS):
+            with cols[i].container(border=True):
+                st.markdown(f"**{CLASSES[k]}**")
+                if c.get(f"{k}_단서"):
+                    st.caption(c[f"{k}_단서"])
+                st.write(c.get(f"{k}_기준", ""))
+        st.markdown(" · ".join(f"**{q}** → {c.get(key, '')}" for key, (q, _) in SPECIAL.items()))
+
+
+def crit_form(form_key, prefix, base=None):
+    """클래스마다 단서(최대 3개) + 한 줄 기준, 헷갈리는 경우 두 가지"""
+    base = base or {}
+    with st.form(form_key):
+        cols = st.columns(2, gap="medium")
+        for i, k in enumerate(CLASS_KEYS):
+            with cols[i % 2].container(border=True):
+                st.markdown(f"**{CLASSES[k]} ({k})**")
+                default = [x for x in (base.get(f"{k}_단서") or "").split(", ") if x in CLUES]
+                st.multiselect("이런 단서가 보이면", CLUES, default=default, max_selections=3, key=f"{prefix}{k}_c", placeholder="단서 고르기 (최대 3개)")
+                st.text_input("한 줄 기준", value=base.get(f"{k}_기준", ""), key=f"{prefix}{k}_t",
+                              placeholder={"plastic": "예) 투명하거나 색이 있고, 눌리면 찌그러지는 병·용기",
+                                           "can": "예) 반짝이는 금속으로 된 원통 모양",
+                                           "glass": "예) 단단하고 투명하며, 깨질 것 같은 병",
+                                           "other": "예) 위 세 가지에 해당하지 않는 것 (비닐, 종이, 스티로폼)"}[k])
+        st.markdown("**헷갈리는 경우도 미리 정해 두기**")
+        sc = st.columns(len(SPECIAL))
+        for (key, (q, opts)), col in zip(SPECIAL.items(), sc):
+            idx = opts.index(base[key]) if base.get(key) in opts else None
+            col.radio(q, opts, index=idx, key=f"{prefix}{key}")
+        go = st.form_submit_button("기준 저장", type="primary", width="stretch")
+    if not go:
+        return None
+    missing = [CLASSES[k] for k in CLASS_KEYS if not ss.get(f"{prefix}{k}_t", "").strip()]
+    if missing:
+        st.error(f"{', '.join(missing)}의 한 줄 기준을 적어 주세요.")
+        return None
+    if any(not ss.get(f"{prefix}{key}") for key in SPECIAL):
+        st.error("헷갈리는 경우 두 가지도 정해 주세요.")
+        return None
+    rec = {}
+    for k in CLASS_KEYS:
+        rec[f"{k}_단서"] = ", ".join(ss.get(f"{prefix}{k}_c", []))
+        rec[f"{k}_기준"] = ss[f"{prefix}{k}_t"].strip()
+    for key in SPECIAL:
+        rec[key] = ss[f"{prefix}{key}"]
+    return rec
+
+
+# ---------------------------------------------------------------- 0단계: 기준 세우기
+if not crit:
+    st.subheader("1. 기준 세우기")
+    st.info("라벨을 붙이기 전에, **어떤 모습이면 어느 클래스인지** 기준을 먼저 정합니다. 누가 보아도 같은 판단이 나오도록 구체적으로 적어 보세요.")
+    rec = crit_form("c2_crit_form", "c2a_")
+    if rec:
+        if storage.save(CRIT_SHEET, {"학생": student, "단계": "처음", **rec}):
+            storage.load.clear()
+            ss["c2_crit"] = rec
+            st.rerun()
+        else:
+            st.error("저장하지 못했어요. 잠시 뒤 다시 눌러 주세요.")
+    st.stop()
+
+
 # ---------------------------------------------------------------- 1라운드
 if not r1_done:
-    st.subheader("1라운드 · 라벨러")
-    st.info("우리 반이 만든 **분류 기준표**를 떠올리며 라벨을 붙이세요. 라벨마다 무엇을 보고 판단했는지, 즉 **단서**도 골라 주세요.")
+    st.subheader("2. 1라운드 · 라벨러")
+    show_crit(crit, "내가 세운 기준 (이 기준대로 라벨을 붙이세요)")
+    st.info("내 기준표대로 라벨을 붙이고, 라벨마다 무엇을 보고 판단했는지, 즉 **단서**도 골라 주세요.")
     with st.form("c2_r1_form"):
         cols = st.columns(3, gap="small")
         for i, p in enumerate(ROUND1):
@@ -84,11 +175,32 @@ with st.expander("1라운드 결과: 반 친구들과 얼마나 같은 라벨을
         st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
         st.caption("의견이 갈린 사진은 선생님 화면에서 함께 보고, 분류 기준표를 더 구체적으로 고칩니다.")
 
+# ---------------------------------------------------------------- 기준 고치기
+if not crit2:
+    st.subheader("3. 기준 고치기")
+    cc = class_crit()
+    if cc:
+        show_crit(cc, "📌 우리 반이 함께 정한 기준표")
+        st.caption("우리 반 기준표를 참고해 내 기준을 고쳐 보세요.")
+    else:
+        st.write("의견이 많이 갈린 사진을 떠올리며, 누가 보아도 같은 라벨이 나오도록 내 기준을 더 구체적으로 고쳐 보세요.")
+    rec = crit_form("c2_crit2_form", "c2b_", base=crit)
+    if rec:
+        if storage.save(CRIT_SHEET, {"학생": student, "단계": "수정", **rec}):
+            storage.load.clear()
+            ss["c2_crit2"] = rec
+            st.rerun()
+        else:
+            st.error("저장하지 못했어요. 잠시 뒤 다시 눌러 주세요.")
+    st.stop()
+
 # ---------------------------------------------------------------- 2라운드
 if not r2_done:
-    st.subheader("2라운드 · 검수자")
+    st.subheader("4. 2라운드 · 검수자")
+    cc = class_crit()
+    show_crit(cc or crit2, "📌 우리 반 기준표 (이 기준으로 검수하세요)" if cc else "내가 고친 기준 (이 기준으로 검수하세요)")
     if not ss.get("c2_r2_open"):
-        st.write("기준표를 고친 뒤, 선생님이 신호를 주면 2라운드를 시작하세요.")
+        st.write("선생님이 신호를 주면 2라운드를 시작하세요.")
         if st.button("2라운드 시작", type="primary"):
             ss["c2_r2_open"] = True
             st.rerun()
