@@ -269,6 +269,8 @@ def tm_tab():
                 "기준 대비": vs,
                 "깨끗한 사진(/4)": round(g["깨끗한 사진 맞힌 수"].mean(), 1),
                 "흙 묻은 사진(/4)": round(g["흙 묻은 사진 맞힌 수"].mean(), 1),
+                "예측한 그래프(최다)": g["그래프 예측"].value_counts().idxmax() if "그래프 예측" in g and g["그래프 예측"].ne("").any() else "-",
+                "실제 그래프(최다)": g["그래프 관찰"].value_counts().idxmax() if "그래프 관찰" in g and g["그래프 관찰"].ne("").any() else "-",
             }
         )
     summary = pd.DataFrame(rows)

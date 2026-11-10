@@ -6,9 +6,11 @@ from c3_config import (
     CLASS_KEYS,
     EXPERIMENTS,
     GRAPH_CHOICES,
+    GRAPH_SHAPES,
     PREDICT_CHOICES,
     SHEET,
     TEST_PHOTOS,
+    graph_path,
     label,
     photo_path,
 )
@@ -25,6 +27,17 @@ STEPS = ["1. 결과 예측", "2. 테스트 결과 입력", "3. 틀린 사진 분
 step = ss.get("c3_step", 0)
 if not ss.get("c3_done"):
     st.progress((step + 1) / len(STEPS), text=STEPS[step])
+
+
+def show_shapes():
+    cols = st.columns(4, gap="small")
+    for i, g in enumerate(GRAPH_SHAPES):
+        with cols[i].container(border=True):
+            path = graph_path(g["key"])
+            if path:
+                st.image(path)
+            st.markdown(f"**{'ABCD'[i]}. {g['key']}**  \n<span style='font-size:0.8em;color:#8C8C8C'>{g['desc']}</span>", unsafe_allow_html=True)
+    st.caption("파란선 = 훈련 정확도(acc, 연습문제 점수) · 빨간선 = 검증 정확도(test acc, 시험문제 점수)")
 
 
 def exp_card(exp: str):
@@ -69,7 +82,11 @@ if step == 0:
         exp_card(exp)
         if exp != "실험 1":
             st.caption("나머지 설정은 모두 그대로 둡니다. 한 번에 하나만 바꿔야 무엇 때문에 결과가 달라졌는지 알 수 있어요.")
+    st.markdown("**학습시키기 전에, 정확도 그래프가 어떤 모양일지 예측해 보세요.**")
+    show_shapes()
     with st.form("c3_predict"):
+        gpred = st.radio("내 조건에서 정확도 그래프는 이런 모양일 것이다", GRAPH_CHOICES, horizontal=True, index=None,
+                         format_func=lambda k: f"{'ABCD'[GRAPH_CHOICES.index(k)]}. {k}")
         pred = st.radio(
             "내 조건에서는 테스트 점수가 기준 실험보다",
             PREDICT_CHOICES,
@@ -84,9 +101,12 @@ if step == 0:
             st.error("내가 맡은 실험을 먼저 골라 주세요.")
         elif exp != "실험 1" and not pred:
             st.error("결과를 예측해 주세요.")
+        elif not gpred:
+            st.error("그래프 모양을 예측해 주세요.")
         elif not why.strip():
             st.error("예측한 이유를 적어 주세요.")
         else:
+            ss["c3_gpred"] = gpred
             ss["c3_exp"] = exp
             ss["c3_pred"] = "기준 실험" if exp == "실험 1" else pred
             ss["c3_why"] = why.strip()
@@ -121,8 +141,11 @@ if step == 1:
                 st.selectbox("AI의 예측값", CLASS_KEYS, index=None, format_func=label, key=f"c3_p{p['no']}", placeholder="AI가 고른 클래스")
                 st.number_input("확률(%)", 0, 100, value=None, step=1, key=f"c3_pct{p['no']}", placeholder="예) 87")
         st.divider()
+        st.markdown("**‘고급 > 내부 살펴보기’의 정확도 그래프는 어느 모양과 가장 비슷한가요?**")
+        show_shapes()
         g1, g2 = st.columns([2, 1])
-        g1.radio("‘내부 살펴보기’ 정확도 그래프: 훈련선(acc)과 검증선(test acc)은?", GRAPH_CHOICES, index=None, key="c3_graph")
+        g1.radio(f"실제 그래프 (내 예측: {ss.get('c3_gpred', '')})", GRAPH_CHOICES, index=None, key="c3_graph", horizontal=True,
+                 format_func=lambda k: f"{'ABCD'[GRAPH_CHOICES.index(k)]}. {k}")
         g2.number_input("마지막 검증 정확도(test acc, %)", 0, 100, value=None, key="c3_valacc", placeholder="모르면 비워 두기")
         go = st.form_submit_button("결과 확인하기", type="primary", width="stretch")
     if go:
@@ -132,6 +155,9 @@ if step == 1:
         else:
             ss["c3_preds"] = {p["no"]: ss[f"c3_p{p['no']}"] for p in TEST_PHOTOS}
             ss["c3_pcts"] = {p["no"]: ss.get(f"c3_pct{p['no']}") for p in TEST_PHOTOS}
+            if not ss.get("c3_graph"):
+                st.error("실제 그래프가 어느 모양과 비슷한지 골라 주세요.")
+                st.stop()
             ss["c3_graph_v"] = ss.get("c3_graph") or ""
             ss["c3_valacc_v"] = ss.get("c3_valacc")
             ss["c3_step"] = 2
@@ -156,6 +182,21 @@ m[0].metric("테스트 점수", f"{len(right)} / 8")
 m[1].metric("깨끗한 사진", f"{clean_ok} / 4")
 m[2].metric("흙 묻은 사진", f"{dirty_ok} / 4")
 st.caption(f"내 예측: 기준 실험보다 **{ss['c3_pred']}**" if exp != "실험 1" else "기준 실험은 다른 실험과 비교하는 기준이 됩니다.")
+gp, go_ = ss.get("c3_gpred", ""), ss.get("c3_graph_v", "")
+with st.container(border=True):
+    a, b, c = st.columns([1, 1, 1.4])
+    a.markdown("**예측한 그래프**")
+    if graph_path(gp):
+        a.image(graph_path(gp))
+    a.caption(gp)
+    b.markdown("**실제 그래프**")
+    if graph_path(go_):
+        b.image(graph_path(go_))
+    b.caption(go_)
+    if gp == go_:
+        c.success("그래프 예측이 맞았어요!")
+    else:
+        c.warning(f"예측은 **{gp}**, 실제는 **{go_}**. 왜 다르게 나왔을지 아래 ‘발견한 점’에 함께 적어 보세요.")
 
 table = pd.DataFrame(
     [
@@ -218,6 +259,7 @@ if go:
         "맞힌 수": len(right),
         "깨끗한 사진 맞힌 수": clean_ok,
         "흙 묻은 사진 맞힌 수": dirty_ok,
+        "그래프 예측": ss.get("c3_gpred", ""),
         "그래프 관찰": ss["c3_graph_v"],
         "검증정확도(%)": "" if ss["c3_valacc_v"] is None else int(ss["c3_valacc_v"]),
         "틀린 사진": ", ".join(str(p["no"]) for p in wrong),

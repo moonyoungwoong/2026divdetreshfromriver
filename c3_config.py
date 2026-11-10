@@ -36,7 +36,24 @@ TEST_PHOTOS = [
 ]
 
 PREDICT_CHOICES = ["높을 것이다", "비슷할 것이다", "낮을 것이다"]
-GRAPH_CHOICES = ["두 선이 붙어 있다", "조금 벌어졌다", "많이 벌어졌다", "잘 모르겠다"]
+# 정확도 그래프 모양 (학습 전 예측, 학습 후 관찰에 같은 보기 사용). 그림: images/c3_graph/a~d.png
+GRAPH_SHAPES = [
+    {"key": "붙어 있다", "file": "a", "desc": "두 선이 함께 올라가 끝까지 가깝다 (차이 10%p 이하)"},
+    {"key": "조금 벌어진다", "file": "b", "desc": "훈련선이 조금 더 높다 (차이 10~20%p)"},
+    {"key": "많이 벌어진다", "file": "c", "desc": "훈련선만 끝까지 오르고 검증선은 낮게 멈춘다 (차이 20%p 이상) → 과적합 신호"},
+    {"key": "둘 다 낮다", "file": "d", "desc": "두 선 모두 낮은 곳에 머문다 → 덜 배움"},
+]
+GRAPH_CHOICES = [g["key"] for g in GRAPH_SHAPES]
+
+
+def graph_path(key: str):
+    for g in GRAPH_SHAPES:
+        if g["key"] == key:
+            p = Path(__file__).parent / "images" / "c3_graph" / f"{g['file']}.png"
+            return str(p) if p.exists() else None
+    return None
+
+
 CAUSES = [
     "데이터가 부족해서",
     "흙·물로 모양이 변해서",
